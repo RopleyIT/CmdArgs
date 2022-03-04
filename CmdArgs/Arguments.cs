@@ -23,8 +23,10 @@ namespace CmdArgs
             for(int i = 0; i < args.Length; i++)
             {
                 var tag = args[i];
-                PropertyInfo? pi = tagProperties.GetValueOrDefault(tag, null);
-                if (pi == null)
+                PropertyInfo pi;
+                if (tagProperties.ContainsKey(tag))
+                    pi = tagProperties[tag];
+                else
                     throw new ArgumentException($"Unrecognised or repeated argument: {tag}");
 
                 if (Arguments<T>.UnderlyingType(pi) == typeof(bool))
