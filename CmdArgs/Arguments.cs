@@ -9,23 +9,23 @@ namespace CmdArgs
 {
     public static class Arguments<T> where T : class, new()
     {
-        public static T Parse(string[] args, T? t = null)
+        public static T Parse(Span<string> args)
         {
             // Check that type T is a valid argument set
 
             if (!Arguments<T>.HasArgSetAttribute())
                 throw new ArgumentException("Arguments<T>: T must have an [ArgSet] attribute");
-            if(t == null)
-                t = new T();
-            Dictionary<string, PropertyInfo?> tagProperties = InitArgProperties();
+            T t = new ();
+            Dictionary<string, PropertyInfo> tagProperties = InitArgProperties();
 
             // Capture the argument values
 
             for(int i = 0; i < args.Length; i++)
             {
-                PropertyInfo? pi = tagProperties.GetValueOrDefault(args[i], null);
+                var tag = args[i];
+                PropertyInfo? pi = tagProperties.GetValueOrDefault(tag, null);
                 if (pi == null)
-                    throw new ArgumentException($"Unrecognised argument: {args[i]}");
+                    throw new ArgumentException($"Unrecognised or repeated argument: {tag}");
 
                 if (Arguments<T>.UnderlyingType(pi) == typeof(bool))
                     pi.SetValue(t, true);
@@ -37,12 +37,12 @@ namespace CmdArgs
                 {
                     if (!double.TryParse(args[++i], out double value))
                         throw new ArgumentException
-                            ($"Argument {args[i - 1]} should be followed by a numeric value");
+                            ($"Argument {tag} should be followed by a numeric value");
                     else if (Arguments<T>.UnderlyingType(pi) == typeof(int))
                     {
                         if (Math.Floor(value) != value)
                             throw new ArgumentException
-                                ($"Argument {args[i - 1]} should be followed by an integer");
+                                ($"Argument {tag} should be followed by an integer");
                         pi.SetValue(t, (int)value);
                     }
                     else if (Arguments<T>.UnderlyingType(pi) == typeof(float))
@@ -50,37 +50,53 @@ namespace CmdArgs
                     else
                         pi.SetValue(t, value);
                 }
+
+                // Find all tags that refer to pi
+
+                var sharedKeys = tagProperties.Keys
+                    .Where(k => tagProperties[k] == pi)
+                    .ToArray();
+                foreach (var key in sharedKeys)
+                    tagProperties.Remove(key);
             }
+
+            // Look for missing arguments that are required. The
+            // only items that may still be in the tagProperties
+            // collection at this point are optional ones.
+
+            foreach (string key in tagProperties.Keys)
+                if (RequiredArg(tagProperties[key]))
+                    throw new ArgumentException($"Argument \"{key}\" is missing");
             return t;
         }
 
         private static Type UnderlyingType(PropertyInfo pi)
             => Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
 
-        private static Dictionary<string, PropertyInfo?> InitArgProperties()
+        private static Dictionary<string, PropertyInfo> InitArgProperties()
         {
-            Dictionary<string, PropertyInfo?> tagProperties = new();
-            var properties = typeof(T).GetProperties();
-            if (properties == null || properties.Length == 0)
-                throw new ArgumentException("Arguments<T>: T must have properties to capture arguments");
-            foreach(var pi in properties)
+            Dictionary<string, PropertyInfo> tagProperties = new();
+            PropertyInfo[] properties = typeof(T).GetProperties();
+            if (!properties.Any())
+                throw new ArgumentException
+                    ("Arguments<T>: Type T must have a property for each argument");
+            foreach(PropertyInfo pi in properties)
             {
                 var argAttributes = pi.GetCustomAttributes<ArgAttribute>();
-                foreach(var argAttribute in argAttributes)
-                    if(!string.IsNullOrWhiteSpace(argAttribute.Tag))
+                foreach (var argAttribute in argAttributes)
+                    if (!string.IsNullOrWhiteSpace(argAttribute.Tag))
                         tagProperties.Add(argAttribute.Tag, pi);
+                    else
+                        throw new ArgumentException($"{pi.DeclaringType?.Name}.{pi.Name} "
+                            + "has empty [Arg()] attribute");
             }
             return tagProperties;
         }
 
-        private static bool HasArgSetAttribute()
-        {
-            var attributes = typeof(T).GetCustomAttributes(typeof (ArgSetAttribute), false);
-            if (attributes == null || attributes.Length == 0)
-                return false;
-            if (attributes[0] as ArgSetAttribute == null)
-                return false;
-            return true;
-        }
+        private static bool RequiredArg(PropertyInfo pi) 
+            => pi.GetCustomAttributes<RequiredAttribute>().Any();
+
+        private static bool HasArgSetAttribute() 
+            => typeof(T).GetCustomAttributes<ArgSetAttribute>().Any();
     }
 }

@@ -2,6 +2,7 @@
 using CmdArgs;
 using System.Linq;
 using System.Reflection;
+using System;
 
 namespace CmdArgsTests
 {
@@ -9,7 +10,7 @@ namespace CmdArgsTests
     public class ArgumentsTests
     {
         [TestMethod]
-        public void BuildsCorrectly()
+        public void HandlesCollisionsCorrectly()
         {
             string[] mdArgs =
             {
@@ -19,9 +20,55 @@ namespace CmdArgsTests
                 "-f", "3.1416"
             };
 
+            Assert.ThrowsException<ArgumentException>(() =>
+            {
+                MyArgs args = Arguments<MyArgs>.Parse(mdArgs);
+            });
+        }
+
+        [TestMethod]
+        public void HandlesArgsCorrectly()
+        {
+            string[] mdArgs =
+            {
+                "-t", "some text",
+                "--integer", "1443",
+                "-f", "3.1416"
+            };
+
             MyArgs args = Arguments<MyArgs>.Parse(mdArgs);
             Assert.AreEqual("some text", args.TArg);
-            Assert.AreEqual(42, args.MyNumber);
+            Assert.AreEqual(1443, args.MyNumber);
+            Assert.AreEqual(3.1416, args.MyDouble);
+        }
+
+        [TestMethod]
+        public void HandlesRequiredArgsCorrectly()
+        {
+            string[] mdArgs =
+            {
+                "-t", "some text",
+                "-i", "1443",
+            };
+
+            Assert.ThrowsException<ArgumentException>(() =>
+            {
+                MyArgs args = Arguments<MyArgs>.Parse(mdArgs);
+            });
+        }
+
+        [TestMethod]
+        public void HandlesOptionalArgsCorrectly()
+        {
+            string[] mdArgs =
+            {
+                "-t", "some text",
+                "-f", "3.1416"
+            };
+
+            MyArgs args = Arguments<MyArgs>.Parse(mdArgs);
+            Assert.AreEqual("some text", args.TArg);
+            Assert.AreEqual(null, args.MyNumber);
             Assert.AreEqual(3.1416, args.MyDouble);
         }
     }
