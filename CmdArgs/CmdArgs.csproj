@@ -12,5 +12,6 @@
     <Description>Another simple command line argument parser</Description>
     <Copyright>Ropley Information Technology Ltd</Copyright>
     <PackageProjectUrl>https://github.com/RopleyIT/CmdArgs</PackageProjectUrl>
+	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 </Project>
