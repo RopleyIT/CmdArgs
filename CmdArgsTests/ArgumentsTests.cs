@@ -22,7 +22,8 @@ namespace CmdArgsTests
 
             Assert.ThrowsException<ArgumentException>(() =>
             {
-                MyArgs args = Arguments<MyArgs>.Parse(mdArgs);
+                MyArgs args = new();
+                Arguments.Parse(mdArgs, args);
             });
         }
 
@@ -36,7 +37,8 @@ namespace CmdArgsTests
                 "-f", "3.1416"
             };
 
-            MyArgs args = Arguments<MyArgs>.Parse(mdArgs);
+            MyArgs args = new();
+            Arguments.Parse(mdArgs, args);
             Assert.AreEqual("some text", args.TArg);
             Assert.AreEqual(1443, args.MyNumber);
             Assert.AreEqual(3.1416, args.MyDouble);
@@ -53,7 +55,8 @@ namespace CmdArgsTests
 
             Assert.ThrowsException<ArgumentException>(() =>
             {
-                MyArgs args = Arguments<MyArgs>.Parse(mdArgs);
+                MyArgs args = new();
+                Arguments.Parse(mdArgs, args);
             });
         }
 
@@ -66,10 +69,31 @@ namespace CmdArgsTests
                 "-f", "3.1416"
             };
 
-            MyArgs args = Arguments<MyArgs>.Parse(mdArgs);
+            MyArgs args = new();
+            Arguments.Parse(mdArgs, args);
             Assert.AreEqual("some text", args.TArg);
             Assert.AreEqual(null, args.MyNumber);
             Assert.AreEqual(3.1416, args.MyDouble);
+        }
+
+        [TestMethod]
+        public void PopulatesMultipleArgSets()
+        {
+            string[] mdArgs =
+            {
+                "-t", "some text",
+                "-f", "3.1416",
+                "-to", "other text",
+                "-fo", "2.1828"
+            };
+
+            MyArgs args = new();
+            OtherArgs other = new();
+            Arguments.Parse(mdArgs, args, other);
+            Assert.AreEqual("some text", args.TArg);
+            Assert.AreEqual(3.1416, args.MyDouble);
+            Assert.AreEqual("other text", other.TArgOther);
+            Assert.AreEqual(2.1828f, other.MyFloat);
         }
     }
 }

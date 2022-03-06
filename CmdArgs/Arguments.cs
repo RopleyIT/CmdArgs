@@ -7,56 +7,61 @@ using System.Reflection;
 
 namespace CmdArgs
 {
-    public static class Arguments<T> where T : class, new()
+    public static class Arguments
     {
-        public static T Parse(Span<string> args)
+        public static void Parse(Span<string> args, params object[] argObjects)
         {
-            // Check that type T is a valid argument set
+            Dictionary<string, PropertyInstance> tagProperties = new();
 
-            if (!Arguments<T>.HasArgSetAttribute())
-                throw new ArgumentException("Arguments<T>: T must have an [ArgSet] attribute");
-            T t = new ();
-            Dictionary<string, PropertyInfo> tagProperties = InitArgProperties();
+            // Check that each argument object is a valid argument set
+
+            foreach(object o in argObjects)
+                if (!HasArgSetAttribute(o))
+                    throw new ArgumentException
+                        ($"Type {o.GetType().Name} must have an [ArgSet] attribute");
+                else
+                    InitArgProperties(tagProperties, o);
 
             // Capture the argument values
 
             for(int i = 0; i < args.Length; i++)
             {
                 var tag = args[i];
-                PropertyInfo pi;
+                PropertyInstance pi;
                 if (tagProperties.ContainsKey(tag))
                     pi = tagProperties[tag];
                 else
                     throw new ArgumentException($"Unrecognised or repeated argument: {tag}");
 
-                if (Arguments<T>.UnderlyingType(pi) == typeof(bool))
-                    pi.SetValue(t, true);
-                else if (Arguments<T>.UnderlyingType(pi) == typeof(string))
-                    pi.SetValue(t, args[++i]);
-                else if (Arguments<T>.UnderlyingType(pi) == typeof(int) 
-                    || Arguments<T>.UnderlyingType(pi) == typeof(double)
-                    || Arguments<T>.UnderlyingType(pi) == typeof(float))
+                if (UnderlyingType(pi.Info) == typeof(bool))
+                    pi.Info.SetValue(pi.Instance, true);
+                else if (UnderlyingType(pi.Info) == typeof(string))
+                    pi.Info.SetValue(pi.Instance, args[++i]);
+                else if (UnderlyingType(pi.Info) == typeof(int) 
+                    || UnderlyingType(pi.Info) == typeof(double)
+                    || UnderlyingType(pi.Info) == typeof(float))
                 {
                     if (!double.TryParse(args[++i], out double value))
                         throw new ArgumentException
                             ($"Argument {tag} should be followed by a numeric value");
-                    else if (Arguments<T>.UnderlyingType(pi) == typeof(int))
+                    else if (UnderlyingType(pi.Info) == typeof(int))
                     {
                         if (Math.Floor(value) != value)
                             throw new ArgumentException
                                 ($"Argument {tag} should be followed by an integer");
-                        pi.SetValue(t, (int)value);
+                        pi.Info.SetValue(pi.Instance, (int)value);
                     }
-                    else if (Arguments<T>.UnderlyingType(pi) == typeof(float))
-                        pi.SetValue(t, (float)value);
+                    else if (UnderlyingType(pi.Info) == typeof(float))
+                        pi.Info.SetValue(pi.Instance, (float)value);
                     else
-                        pi.SetValue(t, value);
+                        pi.Info.SetValue(pi.Instance, value);
                 }
 
                 // Find all tags that refer to pi
 
                 var sharedKeys = tagProperties.Keys
-                    .Where(k => tagProperties[k] == pi)
+                    .Where(k => tagProperties[k].Info == pi.Info
+                        && tagProperties[k].Instance == pi.Instance)
                     .ToArray();
                 foreach (var key in sharedKeys)
                     tagProperties.Remove(key);
@@ -67,38 +72,40 @@ namespace CmdArgs
             // collection at this point are optional ones.
 
             foreach (string key in tagProperties.Keys)
-                if (RequiredArg(tagProperties[key]))
+                if (RequiredArg(tagProperties[key].Info))
                     throw new ArgumentException($"Argument \"{key}\" is missing");
-            return t;
+        }
+
+        private static void InitArgProperties
+            (Dictionary<string, PropertyInstance> tagProperties, object o)
+        {
+            PropertyInfo[] properties = o.GetType().GetProperties();
+            foreach (PropertyInfo pi in properties)
+            {
+                var argAttributes = pi.GetCustomAttributes<ArgAttribute>();
+                foreach (var argAttribute in argAttributes)
+                    if (!string.IsNullOrWhiteSpace(argAttribute.Tag))
+                        tagProperties.Add(argAttribute.Tag, new PropertyInstance(o, pi));
+                    else
+                        throw new ArgumentException($"{pi.DeclaringType?.Name}.{pi.Name} "
+                            + "has empty [Arg()] attribute");
+            }
         }
 
         private static Type UnderlyingType(PropertyInfo pi)
             => Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
 
-        private static Dictionary<string, PropertyInfo> InitArgProperties()
-        {
-            Dictionary<string, PropertyInfo> tagProperties = new();
-            PropertyInfo[] properties = typeof(T).GetProperties();
-            if (!properties.Any())
-                throw new ArgumentException
-                    ("Arguments<T>: Type T must have a property for each argument");
-            foreach(PropertyInfo pi in properties)
-            {
-                var argAttributes = pi.GetCustomAttributes<ArgAttribute>();
-                foreach (var argAttribute in argAttributes)
-                    if (!string.IsNullOrWhiteSpace(argAttribute.Tag))
-                        tagProperties.Add(argAttribute.Tag, pi);
-                    else
-                        throw new ArgumentException($"{pi.DeclaringType?.Name}.{pi.Name} "
-                            + "has empty [Arg()] attribute");
-            }
-            return tagProperties;
-        }
-
         private static bool RequiredArg(PropertyInfo pi) 
             => pi.GetCustomAttributes<RequiredAttribute>().Any();
 
-        private static bool HasArgSetAttribute() 
-            => typeof(T).GetCustomAttributes<ArgSetAttribute>().Any();
+        private static bool HasArgSetAttribute(object o)
+        {
+            Type t = o.GetType();
+            if (!t.GetCustomAttributes<ArgSetAttribute>().Any())
+                return false;
+            if (!t.IsClass)
+                return false;
+            return true;
+        }
     }
 }

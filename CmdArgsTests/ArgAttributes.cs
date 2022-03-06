@@ -40,21 +40,4 @@ namespace CmdArgsTests
 
         }
     }
-
-    [ArgSet]
-    public class MyArgs
-    {
-        [Arg("-t")]
-        public string TArg { get; set; } = string.Empty;
-
-        [Arg("-i")]
-        [Arg("--integer")]
-        public int? MyNumber { get; set; }
-
-        [Arg("-f"), Required]
-        public double MyDouble { get; set; }
-
-        [Arg("-s")]
-        public string? TOptString { get; set; }
-    }
 }
