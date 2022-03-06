@@ -4,8 +4,11 @@ Arguments determine their data type from the type of the property in the class, 
 command line format should be, and whether an argument is mandatory or optional.
 
 ## Usage
+
+Consider two classes set up to map command line arguments to properties of those classes:
+
 ```
-[Argset]
+[ArgSet]
 public class MyArgs
 {
     [Arg("-t")]
@@ -19,14 +22,34 @@ public class MyArgs
     [Arg("-y")]
     public bool TrueIfArgPresent { get; set; }
 }
+
+[ArgSet]
+public class MoreArgs
+{
+    [Arg("-f")]
+    public float Float { get; set; }
+}
 ```
 The presence of multiple Arg attributes on a property allows either format to be used. A boolean property is set
-to true of the argument is included, false if omitted. The Required attribute will cause the argument parsing
-to throw an Argument exception if th `-n` flag in the eample above is not present.
+to true if the argument appears in the command line, false if not. The Required attribute will cause the argument parsing
+to throw an Argument exception if the `-n` flag is not present in the example above.
+
+To populate instances of these classes from a command line, in the `main` method use the following code:
+
+```
+static void main(string[] args)
+{
+    MyArgs myArgs = new();
+    MoreArgs moreArgs = new();
+    Arguments.Parse(args, myArgs, moreArgs);
+
+    ... myArgs and moreArgs will have been populated with values ...
+}
+```
 
 Examples of command lines that might parse correctly for the above class:
 
 ```
 $ mycmd.exe --text "Text to go into the property TextArg" -n 3.14159
-$ mycmd.exe -t "Short text flag" -n 1 -y
+$ mycmd.exe -t "Short text flag" -n 1 -y -f 1.62E-19
 ```
