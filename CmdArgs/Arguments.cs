@@ -9,6 +9,46 @@ namespace CmdArgs
 {
     public static class Arguments
     {
+        public static string Describe(params object[] argObjects)
+        {
+            StringBuilder description = new();
+            foreach (object o in argObjects)
+                DescribeArgProperties(description, o);
+            return description.ToString();
+        }
+
+        private static void DescribeArgProperties(StringBuilder description, object o)
+        {
+            var descAttribute = o.GetType().GetCustomAttribute<DescriptionAttribute>();
+            if (descAttribute != null)
+                description.AppendLine(descAttribute.Text);
+
+            PropertyInfo[] properties = o.GetType().GetProperties();
+            foreach (PropertyInfo pi in properties)
+            {
+                var argAttributes = pi.GetCustomAttributes<ArgAttribute>();
+                descAttribute = pi.GetCustomAttribute<DescriptionAttribute>();
+                var reqAttribute = pi.GetCustomAttribute<RequiredAttribute>();
+                description.Append
+                    ($"  {string.Join("|", argAttributes.Select(a => a.Tag))}");
+                if (UnderlyingType(pi) == typeof(string))
+                    description.Append(" \"a string\"");
+                else if (UnderlyingType(pi) == typeof(int))
+                    description.Append(" integer-value");
+                else if(UnderlyingType(pi) == typeof(double)
+                    || UnderlyingType(pi) == typeof(float))
+                    description.Append(" float-value");
+                if (reqAttribute != null)
+                        description.Append("  (required)\r\n");
+                    else
+                        description.Append("  (optional)\r\n");
+                if (descAttribute != null)
+                    description.Append($"    {descAttribute.Text}\r\n");
+                else
+                    description.Append("    (no description)\r\n");
+            }
+        }
+
         public static void Parse(Span<string> args, params object[] argObjects)
         {
             Dictionary<string, PropertyInstance> tagProperties = new();

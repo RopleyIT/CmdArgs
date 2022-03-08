@@ -95,5 +95,14 @@ namespace CmdArgsTests
             Assert.AreEqual("other text", other.TArgOther);
             Assert.AreEqual(2.1828f, other.MyFloat);
         }
+
+        [TestMethod]
+        public void CanBuildDescription()
+        {
+            MyArgs args = new();
+            OtherArgs other = new();
+            string description = Arguments.Describe(args, other);
+            Assert.IsTrue(description.Length > 0);
+        }
     }
 }

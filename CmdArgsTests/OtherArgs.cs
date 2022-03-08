@@ -9,11 +9,14 @@ namespace CmdArgsTests
 {
 
     [ArgSet]
+    [Description("These are the other args")]
     public class OtherArgs
     {
+        [Description("The other string")]
         [Arg("-to")]
         public string TArgOther { get; set; } = string.Empty;
 
+        [Description("The other integer")]
         [Arg("-io")]
         [Arg("--other_integer")]
         public int? MyNumberOther { get; set; }
