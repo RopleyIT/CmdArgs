@@ -1,16 +1,49 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using System.Reflection;
 using System.Text;
-using System.Threading.Tasks;
-using System.Reflection;
 
 namespace CmdArgs
 {
+    /// <summary>
+    /// Manage the parsing and documentation for command-line arguments
+    /// passed into a program via the main(...) entrypoint method
+    /// </summary>
+    
     public static class Arguments
     {
+        /// <summary>
+        /// Parse the set of arguments passed on a comand line to
+        /// a main function (entrypoint function) of an application
+        /// </summary>
+        /// <param name="args">The array of strings passed as comand
+        /// line arguments (accessed as a span of strings)</param>
+        /// <param name="argObjects">The array of ArgSet objects
+        /// in order of parsing (arguments of one ArgSet must
+        /// all be grouped together on the command line, before
+        /// beginning the next set of arguments)</param>
+
+        public static void Parse(Span<string> args, params object[] argObjects)
+        {
+            ValidateArgSetArguments(argObjects);
+
+            foreach (object argObject in argObjects)
+                args = ParseArgSet(args, argObject);
+            if (args.Length > 0)
+                throw new ArgumentException($"Unrecognised or duplicate argument: {args[0]}");
+        }
+
+        /// <summary>
+        /// Produce a usage friendly description of each 
+        /// set of arguments for documentation purposes
+        /// </summary>
+        /// <param name="argObjects">The ordered sequence
+        /// of [ArgSet] objects</param>
+        /// <returns>A descriptive string for use in
+        /// run-time documentation</returns>
+
         public static string Describe(params object[] argObjects)
         {
+            ValidateArgSetArguments(argObjects);
+
             StringBuilder description = new();
             foreach (object o in argObjects)
                 DescribeArgProperties(description, o);
@@ -35,13 +68,13 @@ namespace CmdArgs
                     description.Append(" \"a string\"");
                 else if (UnderlyingType(pi) == typeof(int))
                     description.Append(" integer-value");
-                else if(UnderlyingType(pi) == typeof(double)
+                else if (UnderlyingType(pi) == typeof(double)
                     || UnderlyingType(pi) == typeof(float))
                     description.Append(" float-value");
                 if (reqAttribute != null)
-                        description.Append("  (required)\r\n");
-                    else
-                        description.Append("  (optional)\r\n");
+                    description.Append("  (required)\r\n");
+                else
+                    description.Append("  (optional)\r\n");
                 if (descAttribute != null)
                     description.Append($"    {descAttribute.Text}\r\n");
                 else
@@ -49,35 +82,44 @@ namespace CmdArgs
             }
         }
 
-        public static void Parse(Span<string> args, params object[] argObjects)
+        private static void ValidateArgSetArguments(object[] argSetList)
         {
-            Dictionary<string, PropertyInstance> tagProperties = new();
-
-            // Check that each argument object is a valid argument set
-
-            foreach(object o in argObjects)
+            foreach(object o in argSetList)
                 if (!HasArgSetAttribute(o))
                     throw new ArgumentException
                         ($"Type {o.GetType().Name} must have an [ArgSet] attribute");
-                else
-                    InitArgProperties(tagProperties, o);
+        }
 
-            // Capture the argument values
+        private static Span<string> ParseArgSet(Span<string> args, object argObject)
+        {
+            var tagProperties = InitArgProperties(argObject);
+            List<string> usedKeys = new();
 
-            for(int i = 0; i < args.Length; i++)
+            // Populate the dictionary with the tag
+            // matchers and property instance references
+
+            int i = 0;
+            while (i < args.Length)
             {
                 var tag = args[i];
                 PropertyInstance pi;
+
+                // First check that this argument has not
+                // already been specified
+
+                if (usedKeys.Contains(tag))
+                    throw new ArgumentException($"Argument {tag} already used");
+
                 if (tagProperties.ContainsKey(tag))
                     pi = tagProperties[tag];
                 else
-                    throw new ArgumentException($"Unrecognised or repeated argument: {tag}");
+                    break;
 
                 if (UnderlyingType(pi.Info) == typeof(bool))
                     pi.Info.SetValue(pi.Instance, true);
                 else if (UnderlyingType(pi.Info) == typeof(string))
                     pi.Info.SetValue(pi.Instance, args[++i]);
-                else if (UnderlyingType(pi.Info) == typeof(int) 
+                else if (UnderlyingType(pi.Info) == typeof(int)
                     || UnderlyingType(pi.Info) == typeof(double)
                     || UnderlyingType(pi.Info) == typeof(float))
                 {
@@ -101,10 +143,12 @@ namespace CmdArgs
 
                 var sharedKeys = tagProperties.Keys
                     .Where(k => tagProperties[k].Info == pi.Info
-                        && tagProperties[k].Instance == pi.Instance)
-                    .ToArray();
+                        && tagProperties[k].Instance == pi.Instance);
+                usedKeys.AddRange(sharedKeys);
                 foreach (var key in sharedKeys)
                     tagProperties.Remove(key);
+
+                i++;
             }
 
             // Look for missing arguments that are required. The
@@ -113,12 +157,19 @@ namespace CmdArgs
 
             foreach (string key in tagProperties.Keys)
                 if (RequiredArg(tagProperties[key].Info))
-                    throw new ArgumentException($"Argument \"{key}\" is missing");
+                    throw new ArgumentException
+                        ($"Argument \"{key}\" missing or misplaced");
+
+            // Truncate the span of arguments to those 
+            // beyond the parsed part of the argument list
+
+            return args[i..];
         }
 
-        private static void InitArgProperties
-            (Dictionary<string, PropertyInstance> tagProperties, object o)
+        private static Dictionary<string, PropertyInstance> 
+            InitArgProperties(object o)
         {
+            Dictionary<string, PropertyInstance> tagProperties = new();
             PropertyInfo[] properties = o.GetType().GetProperties();
             foreach (PropertyInfo pi in properties)
             {
@@ -130,12 +181,13 @@ namespace CmdArgs
                         throw new ArgumentException($"{pi.DeclaringType?.Name}.{pi.Name} "
                             + "has empty [Arg()] attribute");
             }
+            return tagProperties;
         }
 
         private static Type UnderlyingType(PropertyInfo pi)
             => Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
 
-        private static bool RequiredArg(PropertyInfo pi) 
+        private static bool RequiredArg(PropertyInfo pi)
             => pi.GetCustomAttributes<RequiredAttribute>().Any();
 
         private static bool HasArgSetAttribute(object o)
